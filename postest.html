@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Laxmi Vinayaka POS</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #bill-modal, #bill-modal * { visibility: visible; }
+      #bill-modal { position: absolute; top: 0; left: 0; width: 100%; }
+    }
+    :root {
+      --cart-h: 45vh;
+      --cart-min-h: 48px;
+    }
+    .hidden { display: none; }
+    .content-pad { padding-bottom: var(--cart-h); }
+    .cart-panel {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: #111; border-top: 2px solid #999;
+      z-index: 50;
+      transition: height .25s ease;
+    }
+    .cart-panel.expanded { height: var(--cart-h); overflow-y: auto; }
+    .cart-panel.collapsed { height: var(--cart-min-h); overflow: hidden; }
+    .cart-title-bar {
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #222;
+      color: #fff;
+    }
+    .qty-btn {
+      padding: 0 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 0.25rem;
+      color: #fff;
+      background: #444;
+      transition: background 0.2s;
+    }
+    .qty-btn:hover {
+      background: #666;
+    }
+    .modal-overlay {
+      background: rgba(0, 0, 0, 0.85);
+    }
+    .modal-overlay input,
+    .modal-overlay button {
+      transition: all 0.2s;
+    }
+    .modal-overlay input:focus {
+      outline: none;
+      border-color: yellow;
+    }
+    .modal-overlay button:hover {
+      background: white;
+      color: black;
+    }
+  </style>
+</head>
+<body class="bg-black text-white font-mono">
+  <div class="p-4 max-w-md mx-auto content-pad">
+    <h1 class="text-2xl font-bold text-center mb-4 tracking-widest text-yellow-300">LAXMI VINAYAKA</h1>
+    <a href="https://docs.google.com/spreadsheets/d/1O_9y6a2ACTyyfj27RebIshe5h1XpxUuOUUe056WgnFg/edit?usp=sharing" target="_blank" class="fixed top-2 right-2 border border-white text-white px-3 py-1 rounded text-sm">🔧 Sheet</a>
+
+    <div id="category-page">
+      <h2 class="text-xl font-semibold mb-2">Select Category</h2>
+      <div id="category-section" class="space-y-2"></div>
+    </div>
+
+    <div id="brand-page" class="hidden">
+      <h2 class="text-xl font-semibold mb-2">Select Company</h2>
+      <div id="brand-section" class="space-y-2"></div>
+      <button onclick="backTo('category')" class="mt-2 text-sm border border-white px-2 py-1 rounded">← Back</button>
+    </div>
+
+    <div id="type-page" class="hidden">
+      <h2 class="text-xl font-semibold mb-2">Select Item</h2>
+      <div id="type-section" class="space-y-2"></div>
+      <button onclick="backTo('brand')" class="mt-2 text-sm border border-white px-2 py-1 rounded">← Back</button>
+    </div>
+
+    <div id="variant-page" class="hidden">
+      <h2 class="text-xl font-semibold mb-2">Variants</h2>
+      <div id="variant-section" class="space-y-2"></div>
+      <button onclick="backTo('type')" class="mt-2 text-sm border border-white px-2 py-1 rounded">← Back</button>
+    </div>
+  </div>
+
+  <div id="cart-panel" class="cart-panel collapsed hidden">
+    <div class="cart-title-bar p-3 border-b border-white" onclick="toggleCart()">
+      <span class="font-semibold">🛒 Cart (<span id="cart-count">0</span>)</span>
+      <span id="cart-toggle-icon">▲</span>
+    </div>
+    <div id="cart-body" class="p-4 space-y-2">
+      <div id="cart-list" class="space-y-2"></div>
+      <div class="text-right font-bold mt-2 mb-2">Total: ₹<span id="total">0</span></div>
+      <button onclick="generateBill()" class="w-full border border-white py-2 rounded">Bill Now</button>
+    </div>
+  </div>
+
+  <div id="bill-modal" class="modal-overlay fixed inset-0 flex items-center justify-center hidden no-print z-50">
+    <div class="bg-black border border-white w-11/12 max-w-xs p-4 rounded shadow text-sm">
+      <div class="text-center mb-2">
+        <h2 class="text-lg font-bold text-yellow-300 tracking-wider">Laxmi Vinayaka Electricals</h2>
+        <div id="bill-date" class="text-xs">Date: </div>
+        <hr class="my-2 border-white">
+      </div>
+      <div id="receipt-items" class="space-y-1"></div>
+      <hr class="my-2 border-white">
+      <div class="text-right font-bold">Total: ₹<span id="receipt-total">0.00</span></div>
+
+      <div class="mt-4 grid grid-cols-2 gap-2">
+        <button onclick="downloadBillPDF()" class="border border-white py-1 rounded">Download PDF</button>
+        <div class="col-span-2 space-y-2">
+          <input id="whats-num" type="tel" placeholder="Enter mobile number" class="w-full border border-white bg-black text-white px-2 py-1 rounded" />
+          <button onclick="sendWhatsAppImage()" class="w-full border border-white py-1 rounded">Send via WhatsApp</button>
+        </div>
+        <button onclick="resetAll();closeBillModal();" class="col-span-2 border border-white py-1 rounded">New Bill</button>
+        <button onclick="closeBillModal()" class="col-span-2 text-center text-xs underline">Close ✖</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbyV4LHEejMXP5G_9T_i07_hobPySnh-jnR1nimHnKkMw_XyX4FAqvh_jdTPcR5bLyk7lg/exec';
+    let rows = [], cart = {}, current = { category: '', brand: '', type: '' };
+    let cartExpanded = false;
+
+    fetch(API_URL)
+      .then(r => r.json())
+      .then(data => {
+        rows = data.map(r => ({ id: r[0], category: r[1], brand: r[2], itemType: r[3], variant: r[4], price: parseFloat(r[5]) }));
+        showCategories();
+      });
+
+    function showOnly(id) {
+      ['category-page','brand-page','type-page','variant-page'].forEach(p => document.getElementById(p).classList.add('hidden'));
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    function showCategories() {
+      const cats = [...new Set(rows.map(r => r.category))];
+      document.getElementById('category-section').innerHTML = cats.map(c => btn(c, `pickCategory('${c}')`)).join('');
+      showOnly('category-page');
+    }
+
+    function pickCategory(c) {
+      current.category = c;
+      const brands = [...new Set(rows.filter(r => r.category === c).map(r => r.brand))];
+      document.getElementById('brand-section').innerHTML = brands.map(b => btn(b, `pickBrand('${b}')`)).join('');
+      showOnly('brand-page');
+    }
+
+    function pickBrand(b) {
+      current.brand = b;
+      const types = [...new Set(rows.filter(r => r.category === current.category && r.brand === b).map(r => r.itemType))];
+      document.getElementById('type-section').innerHTML = types.map(t => btn(t, `pickType('${t}')`)).join('');
+      showOnly('type-page');
+    }
+
+    function pickType(t) {
+      current.type = t;
+      const vars = rows.filter(r => r.category === current.category && r.brand === current.brand && r.itemType === t);
+      document.getElementById('variant-section').innerHTML = vars.map(v => `
+        <div class="flex justify-between items-center border border-gray-400 p-2 rounded cursor-pointer hover:bg-yellow-100 hover:text-black transition" onclick="addToCart('${v.id}',1)">
+          <span>${v.variant}</span><span>₹${v.price}</span>
+        </div>`).join('');
+      showOnly('variant-page');
+    }
+
+    function backTo(step) {
+      showOnly(`${step}-page`);
+    }
+
+    function btn(label, action) {
+      return `<button onclick="${action}" class="w-full text-left px-3 py-2 bg-yellow-100 text-black hover:bg-yellow-200 rounded font-semibold">${label}</button>`;
+    }
+
+    function addToCart(id, qty=1) {
+      cart[id] = (cart[id] || 0) + qty;
+      renderCart();
+    }
+
+    function updateQty(id, delta) {
+      cart[id] = Math.max(0, (cart[id] || 0) + delta);
+      if(cart[id] === 0) delete cart[id];
+      renderCart();
+    }
+
+    function removeFromCart(id) {
+      delete cart[id];
+      renderCart();
+    }
+
+    function renderCart() {
+      const list = document.getElementById('cart-list');
+      list.innerHTML = '';
+      let total = 0, count = 0;
+      Object.keys(cart).forEach(id => {
+        const it = rows.find(r => r.id === id);
+        const qty = cart[id];
+        count += qty;
+        total += qty * it.price;
+        list.innerHTML += `<div class='flex justify-between items-center border p-2 rounded'>
+          <div class='flex flex-col'><span>${it.brand} ${it.itemType} ${it.variant}</span><span class='text-sm text-gray-500'>₹${it.price} each</span></div>
+          <div class='flex items-center space-x-1'>
+            <button class='qty-btn' onclick="updateQty('${id}',-1)">−</button>
+            <span>${qty}</span>
+            <button class='qty-btn' onclick="updateQty('${id}',1)">+</button>
+            <button onclick="removeFromCart('${id}')" class='text-red-500 text-sm'>❌</button>
+          </div>
+        </div>`;
+      });
+      document.getElementById('total').textContent = total.toFixed(2);
+      document.getElementById('cart-count').textContent = count;
+      document.getElementById('cart-panel').classList.toggle('hidden', total === 0);
+    }
+
+    function toggleCart() {
+      cartExpanded = !cartExpanded;
+      const panel = document.getElementById('cart-panel');
+      panel.classList.toggle('expanded', cartExpanded);
+      panel.classList.toggle('collapsed', !cartExpanded);
+      document.getElementById('cart-toggle-icon').textContent = cartExpanded ? '▼' : '▲';
+    }
+
+    function generateBill() {
+      const now = new Date();
+      document.getElementById('bill-date').textContent = `Date: ${now.toLocaleString()}`;
+      const receipt = document.getElementById('receipt-items');
+      receipt.innerHTML = '';
+      let total = 0;
+      Object.keys(cart).forEach(id => {
+        const it = rows.find(r => r.id === id);
+        const qty = cart[id];
+        const amt = qty * it.price;
+        total += amt;
+        const line = `${it.brand} ${it.itemType} ${it.variant}`.trim();
+        receipt.innerHTML += `<div class="flex justify-between">
+          <span>${line}</span><span>${qty} x ₹${it.price}</span>
+        </div><div class="text-right">₹${amt.toFixed(2)}</div>`;
+      });
+      document.getElementById('receipt-total').textContent = total.toFixed(2);
+      openBillModal();
+    }
+
+    async function sendWhatsAppImage() {
+      const number = document.getElementById('whats-num').value.trim();
+      if (!/^\d{10,}$/.test(number)) {
+        alert('Enter valid 10+ digit number');
+        return;
+      }
+      document.getElementById('bill-modal').scrollIntoView();
+      await new Promise(res => setTimeout(res, 300));
+      html2canvas(document.querySelector('#bill-modal')).then(canvas => {
+        canvas.toBlob(blob => {
+          const file = new File([blob], 'bill.png', { type: 'image/png' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(file);
+          link.download = 'bill.png';
+          link.click();
+          window.open(`https://wa.me/${number}`, '_blank');
+        });
+      });
+    }
+
+    function openBillModal() {
+      document.getElementById('bill-modal').classList.remove('hidden');
+    }
+
+    function closeBillModal() {
+      document.getElementById('bill-modal').classList.add('hidden');
+    }
+
+    function downloadBillPDF() {
+      const bill = document.querySelector('#bill-modal');
+      html2pdf().from(bill).save("bill.pdf");
+    }
+
+    function resetAll() {
+      cart = {};
+      renderCart();
+      showCategories();
+      closeBillModal();
+    }
+  </script>
+</body>
+</html>
