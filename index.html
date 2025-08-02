@@ -9,6 +9,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     @media print {
+  .no-print { display: none !important; }
+}
+
+    @media print {
       body * { visibility: hidden; }
       #bill-modal, #bill-modal * { visibility: visible; }
       #bill-modal { position: absolute; top: 0; left: 0; width: 100%; }
@@ -52,8 +56,19 @@
   </style>
 </head>
 <body class="bg-black text-white font-mono">
+  <button onclick="window.open(SHEET_URL, '_blank')" class="mb-2 text-sm border border-white px-2 py-1 rounded bg-yellow-300 text-black font-semibold">
+  📄Sheet</button>
+
   <div class="p-4 max-w-md mx-auto content-pad">
     <h1 class="text-2xl font-bold text-center mb-4 tracking-widest text-yellow-300">LAXMI VINAYAKA</h1>
+
+    <div class="text-right mb-2">
+  <button onclick="toggleCostVisibility()" id="cost-toggle-btn" title="Toggle Cost Price" class="text-white text-sm border border-white px-2 py-1 rounded flex items-center space-x-1">
+    <span id="eye-icon">🙈</span>
+    <span>Show Cost</span>
+  </button>
+</div>
+
 
     <div id="category-page">
       <h2 class="text-xl font-semibold mb-2">Select Category</h2>
@@ -81,6 +96,15 @@
 
   <div id="cart-panel" class="cart-panel collapsed hidden">
     <div class="cart-title-bar p-3 border-b border-white" onclick="toggleCart()">
+
+<div class="text-right px-4 py-2">
+  <button onclick="toggleCostVisibility()" id="cart-cost-toggle-btn" title="Toggle Cost Price in Cart" class="text-white text-xs border border-white px-2 py-1 rounded flex items-center space-x-1">
+    <span id="cart-eye-icon">🙈</span>
+    
+  </button>
+</div>
+
+
       <span class="font-semibold">🛒 Cart (<span id="cart-count">0</span>)</span>
       <span id="cart-toggle-icon">▲</span>
     </div>
@@ -115,6 +139,40 @@
 
   <script>
     const API_URL = 'https://script.google.com/macros/s/AKfycbxv0BY0BgDvUEAT0VGEmkHPLwVDWz90NFVVlbKsRmPKrHUwjORtAiDzzGVDXsuqrZzDPw/exec';
+    
+    const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1O_9y6a2ACTyyfj27RebIshe5h1XpxUuOUUe056WgnFg/edit?gid=0#gid=0';
+    
+
+
+
+let showCost = false;
+
+function toggleCostVisibility() {
+  showCost = !showCost;
+
+  // Update both icons/texts if present
+  const icon1 = document.getElementById('eye-icon');
+  const label1 = document.querySelector('#cost-toggle-btn span:last-child');
+  if (icon1 && label1) {
+    icon1.textContent = showCost ? '👁️' : '🙈';
+    
+  }
+
+  const icon2 = document.getElementById('cart-eye-icon');
+  const label2 = document.querySelector('#cart-cost-toggle-btn span:last-child');
+  if (icon2 && label2) {
+    icon2.textContent = showCost ? '👁️' : '🙈';
+   
+  }
+
+  // Refresh both views if needed
+  if (current.category && current.brand && current.type) pickType(current.type);
+  renderCart();
+}
+
+
+
+
     let rows = [], cart = {}, current = { category: '', brand: '', type: '' };
     let cartExpanded = false;
 
@@ -162,13 +220,23 @@
     function pickType(t) {
       current.type = t;
       const vars = rows.filter(r => r.category === current.category && r.brand === current.brand && r.itemType === t);
-      document.getElementById('variant-section').innerHTML = vars.map(v => `
-        <div class="flex flex-col border border-gray-400 p-2 rounded cursor-pointer hover:bg-yellow-100 hover:text-black transition" onclick="addToCart('${v.id}',1)">
-          <div class="flex justify-between items-center">
-            <span>${v.variant}</span><span>₹${v.price}</span>
-          </div>
-          <div class="text-sm text-gray-400">${v.discountNote}</div>
-        </div>`).join('');
+      
+      
+     document.getElementById('variant-section').innerHTML = vars.map(v => `
+  <div class="flex flex-col border border-gray-400 p-2 rounded cursor-pointer hover:bg-yellow-100 hover:text-black transition" onclick="addToCart('${v.id}',1)">
+    <div class="flex justify-between items-center">
+      <span>${v.variant}</span>
+      <span>
+        ₹${v.price}
+        ${showCost ? `<span class="text-xs text-red-400 ml-1">(Cost: ₹${v.cost})</span>` : ''}
+      </span>
+    </div>
+    <div class="text-sm text-gray-400">${v.discountNote}</div>
+  </div>`).join('');
+ 
+
+
+
       showOnly('variant-page');
     }
 
@@ -191,29 +259,88 @@
       renderCart();
     }
 
-    function renderCart() {
-      const list = document.getElementById('cart-list');
-      list.innerHTML = '';
-      let total = 0, count = 0;
-      Object.keys(cart).forEach(id => {
-        const it = rows.find(r => r.id === id);
-        const qty = cart[id];
-        count += qty;
-        total += qty * it.price;
-        list.innerHTML += `<div class='flex justify-between items-center border p-2 rounded'>
-          <div class='flex flex-col'><span>${it.brand} ${it.itemType} ${it.variant}</span><span class='text-sm text-gray-500'>₹${it.price} each</span></div>
-          <div class='flex items-center space-x-1'>
-            <button class='qty-btn' onclick="updateQty('${id}',-1)">−</button>
-            <span>${qty}</span>
-            <button class='qty-btn' onclick="updateQty('${id}',1)">+</button>
-            <button onclick="removeFromCart('${id}')" class='text-red-500 text-sm'>❌</button>
-          </div>
-        </div>`;
-      });
-      document.getElementById('total').textContent = total.toFixed(2);
-      document.getElementById('cart-count').textContent = count;
-      document.getElementById('cart-panel').classList.toggle('hidden', total === 0);
+ function renderCart() {
+  const list = document.getElementById('cart-list');
+  list.innerHTML = '';
+  let total = 0, count = 0;
+
+  Object.keys(cart).forEach(id => {
+    const it = rows.find(r => r.id === id);
+    const qty = cart[id];
+    count += qty;
+
+    const cost = it.cost;
+    const price = it.price;
+    const margin = ((price - cost) / cost) * 100;
+    const roundedMargin = Math.floor(margin);
+
+    let discountOptions = `<option value="0">0%</option>`;
+    for (let d = 10; d <= roundedMargin - 10; d += 10) {
+      discountOptions += `<option value="${d}">-${d}% margin</option>`;
     }
+
+    const actualPrice = price * qty;
+
+    list.innerHTML += `
+      <div class='flex justify-between items-center border p-2 rounded'>
+        <div class='flex flex-col'>
+          <span>${it.brand} ${it.itemType} ${it.variant}</span>
+          
+          
+          
+          <span class='text-sm text-gray-500' id="price-line-${id}">
+  ₹${actualPrice.toFixed(2)} (${qty} x ₹${price.toFixed(2)})
+  ${showCost ? `<span class="text-xs text-red-400 ml-2">(Cost: ₹${it.cost})</span>` : ''}
+</span>
+
+
+
+
+
+          <label class="text-xs mt-1">Adjust Margin:</label>
+          <select id="discount-${id}" class="text-xs bg-black text-white border border-white rounded px-1 py-0 no-print" onchange="applyDiscountAndUpdate('${id}')">
+            ${discountOptions}
+          </select>
+        </div>
+        <div class='flex items-center space-x-1'>
+          <button class='qty-btn' onclick="updateQty('${id}',-1)">−</button>
+          <span>${qty}</span>
+          <button class='qty-btn' onclick="updateQty('${id}',1)">+</button>
+          <button onclick="removeFromCart('${id}')" class='text-red-500 text-sm'>❌</button>
+        </div>
+      </div>`;
+  });
+
+  updateCartTotal();
+}
+
+function applyDiscountAndUpdate(id) {
+  updateCartTotal();
+}
+
+function updateCartTotal() {
+  let total = 0;
+  Object.keys(cart).forEach(id => {
+    const it = rows.find(r => r.id === id);
+    const qty = cart[id];
+    const cost = it.cost;
+    const price = it.price;
+    const margin = ((price - cost) / cost) * 100;
+    const selectedDiscount = parseInt(document.getElementById(`discount-${id}`)?.value || '0');
+    const adjustedMargin = margin - selectedDiscount;
+    const discountedPrice = cost * (1 + adjustedMargin / 100);
+
+    const priceText = `${qty} x ₹${discountedPrice.toFixed(2)}`;
+    document.getElementById(`price-line-${id}`).textContent = `₹${(discountedPrice * qty).toFixed(2)} (${priceText})`;
+
+    total += discountedPrice * qty;
+  });
+
+  document.getElementById('total').textContent = total.toFixed(2);
+  document.getElementById('cart-count').textContent = Object.values(cart).reduce((a, b) => a + b, 0);
+  document.getElementById('cart-panel').classList.toggle('hidden', total === 0);
+}
+
 
     function toggleCart() {
       cartExpanded = !cartExpanded;
@@ -223,27 +350,52 @@
       document.getElementById('cart-toggle-icon').textContent = cartExpanded ? '▼' : '▲';
     }
 
-    function generateBill() {
-      const now = new Date();
-      document.getElementById('bill-date').textContent = `Date: ${now.toLocaleString()}`;
-      const receipt = document.getElementById('receipt-items');
-      receipt.innerHTML = '';
-      let total = 0;
-      Object.keys(cart).forEach(id => {
-        const it = rows.find(r => r.id === id);
-        const qty = cart[id];
-        const amt = qty * it.price;
-        total += amt;
-        const line = `${it.brand} ${it.itemType} ${it.variant}`.trim();
-        receipt.innerHTML += `<div class="flex justify-between">
-  <span>${line}</span>
-  <span>${qty} x ₹${it.price} = ₹${amt.toFixed(2)}</span>
-</div>`;
+function generateBill() {
+  const now = new Date();
+  document.getElementById('bill-date').textContent = `Date: ${now.toLocaleString()}`;
+  const receipt = document.getElementById('receipt-items');
+  receipt.innerHTML = '';
 
-      });
-      document.getElementById('receipt-total').textContent = total.toFixed(2);
-      openBillModal();
+  let total = 0;
+  let discountSafe = true;
+
+  Object.keys(cart).forEach(id => {
+    const it = rows.find(r => r.id === id);
+    const qty = cart[id];
+
+    const cost = it.cost;
+    const price = it.price;
+    const margin = ((price - cost) / cost) * 100;
+
+    const discountDropdown = document.getElementById(`discount-${id}`);
+    const discountPercent = discountDropdown ? parseInt(discountDropdown.value) : 0;
+
+    const adjustedMargin = margin - discountPercent;
+    const discountedPrice = parseFloat((cost * (1 + adjustedMargin / 100)).toFixed(2));
+
+    if (discountedPrice < cost) {
+      discountSafe = false;
     }
+
+    const amt = discountedPrice * qty;
+    total += amt;
+
+    const line = `${it.brand} ${it.itemType} ${it.variant}`.trim();
+    receipt.innerHTML += `<div class="flex justify-between">
+      <span>${line}</span>
+      <span>${qty} x ₹${discountedPrice.toFixed(2)} = ₹${amt.toFixed(2)}</span>
+    </div>`;
+  });
+
+  if (!discountSafe) {
+    alert("One or more items have discount too high (below cost price). Please reduce the discount.");
+    return;
+  }
+
+  document.getElementById('receipt-total').textContent = total.toFixed(2);
+  openBillModal();
+}
+
 
     async function sendWhatsAppImage() {
       const number = document.getElementById('whats-num').value.trim();
